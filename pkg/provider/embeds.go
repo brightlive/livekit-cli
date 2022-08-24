@@ -8,8 +8,6 @@ import (
 	"os"
 	"strconv"
 
-	"go.uber.org/atomic"
-
 	"github.com/livekit/protocol/livekit"
 )
 
@@ -87,7 +85,6 @@ var (
 	res embed.FS
 
 	videoSpecs [][]*videoSpec
-	videoIndex atomic.Int64
 )
 
 func init() {
