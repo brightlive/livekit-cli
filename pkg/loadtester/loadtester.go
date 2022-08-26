@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,8 +63,17 @@ func LayoutFromString(str string) Layout {
 	return LayoutSpeaker
 }
 
+type CurrentUser struct {
+	UID string
+}
+
+type Participants struct {
+	CurrentUser CurrentUser
+}
+
 type BrightToken struct {
-	Token string
+	Token        string
+	Participants Participants
 }
 type TesterParams struct {
 	URL            string
@@ -79,7 +89,7 @@ type TesterParams struct {
 	BrightBotStartId  int
 
 	name           string
-	sequence       int
+	Sequence       int
 	expectedTracks int
 }
 
@@ -96,11 +106,20 @@ func (t *LoadTester) Start(botId int) error {
 		return nil
 	}
 
-	var room *lksdk.Room
+	identity := "RHMuUAqow2ftRQsDKNrKi9aKaFp1"
+	t.room = lksdk.CreateRoom(&lksdk.RoomCallback{
+		ParticipantCallback: lksdk.ParticipantCallback{
+			OnTrackSubscribed: t.onTrackSubscribed,
+			OnTrackSubscriptionFailed: func(sid string, rp *lksdk.RemoteParticipant) {
+				fmt.Printf("track subscription failed, lp:%v, sid:%v, rp:%v/%v\n", identity, sid, rp.Identity(), rp.SID())
+			},
+		},
+	})
 	var err error
 	// make up to 10 reconnect attempts
-	for i := 0; i < 10; i++ {
-		getTokenUrl := fmt.Sprintf("%s%s?testUser=%d", t.params.BrightUrl, t.params.Room, botId)
+	for i := 0; i < 1; i++ {
+		url := strings.ReplaceAll(t.params.BrightUrl, "{{id}}", t.params.Room)
+		getTokenUrl := fmt.Sprintf("%s?testUser=%d", url, botId)
 		fmt.Printf("Connecting to url: %s\n", getTokenUrl)
 		req, err := http.NewRequest("GET", getTokenUrl, nil)
 		if err != nil {
@@ -127,9 +146,18 @@ func (t *LoadTester) Start(botId int) error {
 
 		defer resp.Body.Close()
 
-		room, err = lksdk.ConnectToRoomWithToken(t.params.URL, bt.Token, lksdk.WithAutoSubscribe(t.params.Subscribe))
+		// room, err = lksdk.ConnectToRoomWithToken(t.params.URL, bt.Token, lksdk.WithAutoSubscribe(t.params.Subscribe))
+		fmt.Println(bt.Participants.CurrentUser.UID)
+		err = t.room.Join(t.params.URL, lksdk.ConnectInfo{
+			APIKey:              t.params.APIKey,
+			APISecret:           t.params.APISecret,
+			RoomName:            t.params.Room,
+			ParticipantIdentity: bt.Participants.CurrentUser.UID,
+		}, lksdk.WithAutoSubscribe(t.params.Subscribe))
 		if err == nil {
 			break
+		} else {
+			fmt.Println(err)
 		}
 		time.Sleep(1 * time.Second)
 	}
@@ -137,12 +165,7 @@ func (t *LoadTester) Start(botId int) error {
 		return err
 	}
 
-	t.room = room
 	t.running.Store(true)
-	room.Callback.OnTrackSubscribed = t.onTrackSubscribed
-	room.Callback.OnTrackSubscriptionFailed = func(sid string, rp *lksdk.RemoteParticipant) {
-		fmt.Printf("track subscription failed, sid:%v, rp:%v\n", sid, rp.Identity())
-	}
 
 	return nil
 }

@@ -4,10 +4,9 @@ import (
 	"embed"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"strconv"
-
-	"go.uber.org/atomic"
 
 	"github.com/livekit/protocol/livekit"
 )
@@ -86,7 +85,6 @@ var (
 	res embed.FS
 
 	videoSpecs [][]*videoSpec
-	videoIndex atomic.Int64
 )
 
 func init() {
@@ -112,7 +110,9 @@ func randomSpecsForCodec(videoCodec string) []*videoSpec {
 			filtered = append(filtered, specs)
 		}
 	}
-	chosen := int(videoIndex.Inc()) % len(filtered)
+	min := 0
+	max := len(filtered)
+	chosen := rand.Intn(max-min+min) % len(filtered)
 	return filtered[chosen]
 }
 
